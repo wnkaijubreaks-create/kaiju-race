@@ -99,42 +99,46 @@ class KaijuRace {
     const N = this.racers.length;
     this.breakF = 0.62; // when the finish line starts to reveal
 
-    const back = Math.min(N - 1, Math.round(N * 0.6)); // MORE fall off, EARLY
-    const front = N - back;
-    const finalG = Math.min(front, 3 + Math.floor(Math.random() * 2)); // 3-4 close finishers
+    // ~80% progressively fall off; the remaining ~20% (3-7) battle at the line.
+    const front = Math.max(1, Math.min(7, Math.round(N * 0.2)));
+    const back = N - front;
     this.frontCount = front;
-    this.finalK = finalG;                              // finish zoom frames the photo finish
+    this.finalK = Math.min(front, 7);
+    const J = (v, a) => v + (Math.random() * 2 - 1) * a;
 
-    // Shuffle, split into front-runners and the (large) early-drop back group.
     const idx = this.racers.map((_, i) => i);
     for (let i = idx.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [idx[i], idx[j]] = [idx[j], idx[i]];
     }
     const frontIdx = idx.slice(0, front);
-    const backSet = new Set(idx.slice(front));
-    const finalSet = new Set(frontIdx.slice(0, finalG)); // the close finishers (incl. winner)
-    const winnerIdx = frontIdx[0];
-    const J = (v, a) => v + (Math.random() * 2 - 1) * a;
+    const backIdx = idx.slice(front);
+    const frontSet = new Set(frontIdx);
+
+    // ~28% of races: a DARK HORSE from the back of the pack storms up to win.
+    const darkHorse = Math.random() < 0.28 && backIdx.length > 0;
+    const winnerIdx = darkHorse
+      ? backIdx[Math.floor(Math.random() * backIdx.length)]
+      : frontIdx[Math.floor(Math.random() * frontIdx.length)]; // any finalist — not always the leader
 
     this.racers.forEach((r, i) => {
-      r.amp = 0.04 + chaos * 0.11 * Math.random();
+      r.amp = 0.04 + chaos * 0.12 * Math.random();
       r.w = ((2 * Math.PI) / D) * (3 + Math.random() * 4);
       r.w2 = ((2 * Math.PI) / D) * (1.5 + Math.random() * 2.5);
       r.phase2 = Math.random() * Math.PI * 2;
       r.phase3 = Math.random() * Math.PI * 2;
-      if (i === winnerIdx) {
-        // surges up late and just edges the photo finish
-        r.kf = [[0, 0], [0.3, J(0.34, 0.03)], [0.72, J(0.66, 0.03)], [0.88, J(0.89, 0.02)], [1, 1]];
-      } else if (backSet.has(i)) {
-        // drops back EARLY (well behind by ~30-45%), never contends
-        r.kf = [[0, 0], [0.3, J(0.22, 0.04)], [0.5, J(0.30, 0.05)], [0.75, J(0.40, 0.05)], [1, J(0.46, 0.06)]];
-      } else if (finalSet.has(i)) {
-        // hangs around, surges with the winner → finishes neck-and-neck (a standout)
-        r.kf = [[0, 0], [0.3, J(0.34, 0.03)], [0.72, J(0.64, 0.04)], [0.88, J(0.86, 0.03)], [1, J(0.95, 0.03)]];
+      if (i === winnerIdx && darkHorse) {
+        // lurks at the back (off-screen), then rockets up the outside to steal it
+        r.kf = [[0, 0], [0.5, J(0.28, 0.05)], [0.8, J(0.46, 0.05)], [0.92, J(0.9, 0.03)], [1, 1]];
+      } else if (i === winnerIdx) {
+        // a finalist that just edges the photo finish
+        r.kf = [[0, 0], [0.3, J(0.34, 0.04)], [0.72, J(0.66, 0.05)], [0.9, J(0.9, 0.03)], [1, 1]];
+      } else if (frontSet.has(i)) {
+        // finalist: contests the line, finishes close (wide jitter → unpredictable order)
+        r.kf = [[0, 0], [0.3, J(0.35, 0.05)], [0.72, J(0.66, 0.08)], [0.9, J(0.9, 0.05)], [1, J(0.92, 0.05)]];
       } else {
-        // front "looks like winners" group that fades and falls off in the final push
-        r.kf = [[0, 0], [0.3, J(0.36, 0.03)], [0.72, J(0.80, 0.04)], [0.88, J(0.80, 0.03)], [1, J(0.72, 0.05)]];
+        // the ~80%: drop back at varied times so they stream off the pack
+        r.kf = [[0, 0], [0.3, J(0.26, 0.06)], [0.6, J(0.34, 0.08)], [0.8, J(0.42, 0.08)], [1, J(0.48, 0.1)]];
       }
     });
     this.winnerRacer = this.racers[winnerIdx];
@@ -213,10 +217,9 @@ class KaijuRace {
   _updateCamera(f, snap) {
     const N = this.racers.length, front = this.frontCount, finalK = this.finalK;
     let K;
-    if (f < 0.28) K = N;
-    else if (f < 0.45) K = N + (front - N) * ((f - 0.28) / 0.17); // big early cull (~60% off)
-    else if (f < 0.82) K = front;                                  // front group jockeys
-    else K = front + (finalK - front) * Math.min(1, (f - 0.82) / 0.18); // tighten to the photo finish
+    if (f < 0.25) K = N;
+    else if (f < 0.8) K = N + (front - N) * ((f - 0.25) / 0.55); // progressive: ~80% stream off by 0.8
+    else K = finalK;                                              // the 3-7 finalists at the line
     K = Math.max(finalK, Math.round(K));
     let target = 0;
     if (K < N) {
