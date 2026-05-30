@@ -277,16 +277,15 @@ const KaijuArt = (() => {
     const cv = document.createElement("canvas");
     cv.width = w + pad * 2; cv.height = targetH + pad * 2;
     const c = cv.getContext("2d");
-    // First pass shows originals untouched; later cycles hue-rotate so 17 base
-    // sprites yield 150 visually distinct racers.
-    const cycle = Math.floor(opts.index / N);
-    const hue = cycle === 0 ? 0 : (cycle * 71 + (opts.index % N) * 19) % 360;
-    if (hue) {
-      c.save(); c.filter = `hue-rotate(${hue}deg)`;
-      c.drawImage(img, pad, pad, w, targetH); c.restore();
-    } else {
-      c.drawImage(img, pad, pad, w, targetH);
-    }
+    // Recolor every racer for a vivid, varied field: spread hues across the full
+    // spectrum via the golden angle (adjacent racers look very different), with a
+    // little saturation variation for extra richness.
+    const hue = Math.round((opts.index * 137.508) % 360);
+    const sat = (0.85 + ((opts.index * 41) % 55) / 100).toFixed(2); // ~0.85–1.39
+    c.save();
+    c.filter = `hue-rotate(${hue}deg) saturate(${sat})`;
+    c.drawImage(img, pad, pad, w, targetH);
+    c.restore();
     if (opts.showNumber) drawBadge(c, cv.width / 2, pad + targetH * 0.6, targetH, opts.number);
     return cv;
   }
