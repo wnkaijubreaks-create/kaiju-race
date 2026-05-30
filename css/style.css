@@ -64,7 +64,7 @@ html, body {
 }
 .hud-title span {
   display: block;
-  font-size: 18px;
+  font-size: 26px;
   /* blocky 1-px-grid outline (built from offset shadows) + drop shadow */
   text-shadow:
     -2px -2px 0 #11131c, 2px -2px 0 #11131c, -2px 2px 0 #11131c, 2px 2px 0 #11131c,
@@ -228,9 +228,8 @@ html, body {
   .icon-btn { width: 34px; height: 34px; font-size: 18px; border-radius: 8px; }
   .text-btn { font-size: 15px; }
   .timer { font-size: 22px; padding: 3px 10px; border-width: 3px; letter-spacing: 1px; }
-  .hud-title span { font-size: 12px; }
+  .hud-title span { font-size: 17px; }
   .hud-title .t-race { margin-top: 2px; }
-  .hud-logo { height: 54px; }
 }
 @media (max-width: 430px) {
   #hud { gap: 5px; padding: 7px 8px; }
