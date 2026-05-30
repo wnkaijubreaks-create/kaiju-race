@@ -74,6 +74,13 @@ html, body {
 .hud-title .t-kaiju { color: #7ed957; }                 /* kaiju green */
 .hud-title .t-race  { color: #ffb347; margin-top: 4px; } /* ember orange */
 
+/* Pixel-art logo image (the kaiju holding the KAIJU RACE sign) */
+.hud-logo {
+  display: block;
+  height: 76px;
+  width: auto;
+  filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.5));
+}
 
 .icon-btn {
   background: #11131c;
@@ -223,10 +230,11 @@ html, body {
   .timer { font-size: 22px; padding: 3px 10px; border-width: 3px; letter-spacing: 1px; }
   .hud-title span { font-size: 12px; }
   .hud-title .t-race { margin-top: 2px; }
+  .hud-logo { height: 54px; }
 }
 @media (max-width: 430px) {
   #hud { gap: 5px; padding: 7px 8px; }
   .text-btn { font-size: 14px; }
   .timer { font-size: 20px; padding: 3px 8px; }
-  .hud-title { display: none; } /* no room alongside the controls + timer on a phone */
+  .hud-title, .hud-logo { display: none; } /* no room alongside the controls + timer on a phone */
 }
