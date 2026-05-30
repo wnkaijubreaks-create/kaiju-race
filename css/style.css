@@ -1,0 +1,188 @@
+:root {
+  --sky: #2a3a5c;
+  --water-top: #3a6b8c;
+  --water-bot: #214b66;
+  --land: #3b7a2e;
+  --accent: #7ed957;
+  --danger: #d92b2b;
+  --hud-bg: rgba(20, 24, 40, 0.85);
+  --panel-bg: #1c2030;
+  --text: #f4f6fb;
+  font-family: "Trebuchet MS", "Segoe UI", system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: #11131c;
+  color: var(--text);
+  overflow: hidden;
+}
+
+#app {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+}
+
+/* ---------- HUD ---------- */
+#hud {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 10px 18px;
+  background: linear-gradient(180deg, rgba(0,0,0,0.45), transparent);
+}
+
+.hud-left { display: flex; align-items: center; gap: 10px; }
+.hud-right {
+  margin-left: auto;
+  font-weight: bold;
+  font-size: 20px;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+  letter-spacing: 0.5px;
+}
+
+.icon-btn {
+  background: #11131c;
+  color: #fff;
+  border: 2px solid #2c3350;
+  border-radius: 10px;
+  width: 42px; height: 42px;
+  font-size: 22px;
+  cursor: pointer;
+  line-height: 1;
+}
+.icon-btn:hover { border-color: var(--accent); }
+
+.text-btn {
+  background: transparent;
+  color: #fff;
+  border: none;
+  font-size: 20px;
+  font-weight: bold;
+  cursor: pointer;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.6);
+}
+.text-btn:hover { color: var(--accent); }
+
+.timer {
+  background: #e9ebfb;
+  color: #11131c;
+  font-size: 44px;
+  font-weight: bold;
+  padding: 4px 24px;
+  border-radius: 14px;
+  border: 4px solid #11131c;
+  letter-spacing: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Arena ---------- */
+#arena {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* ---------- Panels & banners ---------- */
+.panel, .banner {
+  position: absolute;
+  z-index: 10;
+  background: var(--panel-bg);
+  border: 4px solid #11131c;
+  border-radius: 18px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+  padding: 22px 26px;
+}
+
+.panel {
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(420px, 92vw);
+}
+
+.banner {
+  top: 70px; left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  width: min(440px, 92vw);
+}
+
+.panel h2, .banner h2 { margin: 0 0 16px; }
+.banner h2 { color: var(--accent); font-size: 30px; margin: 10px 0 16px; }
+
+.panel-close, .banner-close {
+  position: absolute;
+  top: 10px; right: 12px;
+  background: var(--danger);
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  width: 30px; height: 30px;
+  font-size: 18px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 18px;
+  font-size: 16px;
+}
+.field.toggle {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+.field input[type="range"] { width: 100%; accent-color: var(--accent); }
+.field input[type="checkbox"] { width: 22px; height: 22px; accent-color: var(--accent); }
+.field select {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 16px;
+  border-radius: 8px;
+  border: 2px solid #2c3350;
+  background: #11131c;
+  color: var(--text);
+}
+
+.banner-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  opacity: 0.85;
+}
+
+.winner-sprite {
+  display: block;
+  margin: 10px auto 2px;
+  height: 132px;
+  width: auto;
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.45));
+}
+
+.big-btn {
+  background: var(--accent);
+  color: #11131c;
+  border: none;
+  border-radius: 12px;
+  padding: 14px 22px;
+  font-size: 20px;
+  font-weight: bold;
+  cursor: pointer;
+  width: 100%;
+}
+.big-btn:hover { filter: brightness(1.08); }
+
+[hidden] { display: none !important; }

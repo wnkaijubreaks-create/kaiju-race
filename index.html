@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kaiju Race!</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Top HUD -->
+    <header id="hud">
+      <div class="hud-left">
+        <button id="settingsBtn" class="icon-btn" title="Settings">&#9881;</button>
+        <button id="startBtn" class="text-btn">Start</button>
+        <button id="pauseBtn" class="text-btn" hidden>Pause</button>
+        <button id="shuffleBtn" class="text-btn">Shuffle</button>
+        <button id="clearBtn" class="text-btn">Clear</button>
+      </div>
+      <div id="timer" class="timer">00:00:00</div>
+      <div class="hud-right">Kaiju Race!</div>
+    </header>
+
+    <!-- Race arena -->
+    <canvas id="arena"></canvas>
+
+    <!-- Winner banner -->
+    <div id="winnerBanner" class="banner" hidden>
+      <button id="closeWinner" class="banner-close" title="Close">&times;</button>
+      <label class="banner-check">
+        <input type="checkbox" id="removeWinner" /> Remove winner from next race?
+      </label>
+      <img id="winnerSprite" class="winner-sprite" alt="" hidden />
+      <h2 id="winnerText">Kaiju #1 wins!</h2>
+      <button id="raceAgainBtn" class="big-btn">Race Again?</button>
+    </div>
+
+    <!-- Settings panel -->
+    <div id="settingsPanel" class="panel" hidden>
+      <button id="closeSettings" class="panel-close" title="Close">&times;</button>
+      <h2>Race Setup</h2>
+
+      <label class="field">
+        <span>Number of kaiju: <strong id="countLabel">8</strong></span>
+        <input type="range" id="countSlider" min="2" max="150" value="8" />
+      </label>
+
+      <label class="field toggle">
+        <span>Show numbers on backs</span>
+        <input type="checkbox" id="showNumbers" checked />
+      </label>
+
+      <label class="field toggle">
+        <span>Use generated kaiju art (if available)</span>
+        <input type="checkbox" id="useArt" checked />
+      </label>
+
+      <label class="field">
+        <span>Race length</span>
+        <select id="durationSel">
+          <option value="10">10 seconds</option>
+          <option value="15">15 seconds</option>
+          <option value="30" selected>30 seconds</option>
+          <option value="60">1 minute</option>
+          <option value="120">2 minutes</option>
+          <option value="180">3 minutes</option>
+          <option value="300">5 minutes</option>
+          <option value="600">10 minutes</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Race excitement (lead changes)</span>
+        <input type="range" id="chaosSlider" min="0" max="100" value="55" />
+      </label>
+
+      <button id="applySettings" class="big-btn">Apply &amp; Reset</button>
+    </div>
+  </div>
+
+  <script src="js/kaiju.js?v=4"></script>
+  <script src="js/race.js?v=4"></script>
+  <script src="js/main.js?v=4"></script>
+</body>
+</html>
