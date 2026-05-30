@@ -13,6 +13,20 @@ function cityRng(seed) {
   };
 }
 
+// Smoothly interpolate a racer's scripted progress timeline [[f,p],...] at time f.
+function interpKF(kf, f) {
+  if (f <= kf[0][0]) return kf[0][1];
+  for (let i = 1; i < kf.length; i++) {
+    if (f <= kf[i][0]) {
+      const [f0, p0] = kf[i - 1], [f1, p1] = kf[i];
+      let t = (f - f0) / (f1 - f0);
+      t = t * t * (3 - 2 * t); // smoothstep
+      return p0 + (p1 - p0) * t;
+    }
+  }
+  return kf[kf.length - 1][1];
+}
+
 class KaijuRace {
   constructor(canvas, onFinish) {
     this.canvas = canvas;
@@ -73,44 +87,58 @@ class KaijuRace {
     this.draw();
   }
 
-  // Pace profiles (duck-race style): the whole field stays bunched until a
-  // late "breakaway", when a lead pack of 3-6 (incl. the winner) sprints to the
-  // line while everyone else trails off. The winner's finalDist is 1.0 so it
-  // crosses exactly when time's up. A windowed wiggle gives mid-race jostling.
+  // Staged race narrative via per-racer keyframe timelines:
+  //   start→50%  whole pack bunched & jostling
+  //   ~50%       back HALF falls off (camera pushes them off-screen)
+  //   ~72%       a lead group of ~5 looks like the winners
+  //   ~88%       challengers surge up from behind ("others come up")
+  //   final      the last group falls off as the winner pulls clear
   _assignPaces() {
     const chaos = this.cfg.chaos / 100;
     const D = this.cfg.duration;
-    const total = this.racers.length;
-    this.breakF = 1 - Math.min(9, D * 0.45) / D; // field starts stretching out ~9s out
-    this.camF = 1 - Math.min(6, D * 0.32) / D;   // camera follows later, ~6s out
-    this.packEnd = 0.5;                           // how far the bunch travels pre-sprint
+    const N = this.racers.length;
+    this.breakF = 0.68; // when the finish line starts to reveal
 
-    // Pick a lead pack of 3-6 (capped to field size), including the winner.
-    let K = Math.min(3 + Math.floor(Math.random() * 4), total);
-    this.leadCount = K;
-    const idxs = this.racers.map((_, i) => i);
-    for (let i = idxs.length - 1; i > 0; i--) {
+    const back = Math.min(N - 1, Math.floor(N * 0.5)); // fall off at halfway (keep ≥1 up front)
+    const front = N - back;
+    const leadG = Math.min(5, front);                  // the "looks like winners" group
+    const challengers = front - leadG;                 // the "others come up" group
+    this.frontCount = front;
+    this.finalK = Math.min(front, 3);                  // how tight the finish zoom gets
+
+    // Shuffle, then split into front-runners and the back half.
+    const idx = this.racers.map((_, i) => i);
+    for (let i = idx.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [idxs[i], idxs[j]] = [idxs[j], idxs[i]];
+      [idx[i], idx[j]] = [idx[j], idx[i]];
     }
-    const lead = new Set(idxs.slice(0, K));
-    const winnerIdx = idxs[0];
+    const frontIdx = idx.slice(0, front);
+    const backSet = new Set(idx.slice(front));
+    const challengerSet = new Set(frontIdx.slice(0, challengers)); // first `challengers` of front
+    const winnerIdx = frontIdx[0]; // a challenger if any exist, else a lead — either way up front
+    const J = (v, a) => v + (Math.random() * 2 - 1) * a;
 
     this.racers.forEach((r, i) => {
-      // Two surge frequencies per racer → irregular shoot-forward / fall-back.
-      r.amp = 0.07 + chaos * 0.16 * Math.random();
-      r.w = ((2 * Math.PI) / D) * (3 + Math.random() * 4);    // ~3-7 surges over the race
+      r.amp = 0.04 + chaos * 0.11 * Math.random();
+      r.w = ((2 * Math.PI) / D) * (3 + Math.random() * 4);
       r.w2 = ((2 * Math.PI) / D) * (1.5 + Math.random() * 2.5);
       r.phase2 = Math.random() * Math.PI * 2;
       r.phase3 = Math.random() * Math.PI * 2;
-      r.isLead = lead.has(i);
-      // Leaders bunch right at the line; trailers fall well short.
-      r.finalDist = r.isLead ? 0.9 + Math.random() * 0.09
-                             : this.packEnd + Math.random() * 0.24;
+      if (i === winnerIdx) {
+        // mid at 72% (not the obvious leader), challenges at 88%, wins at the line
+        r.kf = [[0, 0], [0.5, J(0.50, 0.03)], [0.72, J(0.65, 0.03)], [0.88, J(0.88, 0.02)], [1, 1]];
+      } else if (backSet.has(i)) {
+        // falls off around halfway, never contends
+        r.kf = [[0, 0], [0.5, J(0.30, 0.05)], [0.72, J(0.40, 0.05)], [0.88, J(0.46, 0.05)], [1, J(0.50, 0.06)]];
+      } else if (challengerSet.has(i)) {
+        // behind the lead group, then surges up late and hangs on near the line
+        r.kf = [[0, 0], [0.5, J(0.46, 0.04)], [0.72, J(0.62, 0.04)], [0.88, J(0.86, 0.03)], [1, J(0.82, 0.04)]];
+      } else {
+        // lead group: out front early (looks winning), then falls off at the end
+        r.kf = [[0, 0], [0.5, J(0.50, 0.04)], [0.72, J(0.78, 0.04)], [0.88, J(0.81, 0.03)], [1, J(0.68, 0.05)]];
+      }
     });
     this.winnerRacer = this.racers[winnerIdx];
-    this.winnerRacer.finalDist = 1;
-    this.winnerRacer.isLead = true;
     this.camLo = 0;
   }
 
@@ -154,26 +182,23 @@ class KaijuRace {
     this.elapsed += dt;
     const D = this.cfg.duration;
     const f = Math.min(this.elapsed / D, 1);
-    const fb = this.breakF, pe = this.packEnd;
-    const sRaw = f <= fb ? 0 : (f - fb) / (1 - fb);
-    const sprint = sRaw * sRaw * (3 - 2 * sRaw); // smoothstep 0..1 over the breakaway
-    // Jostle envelope: ramps in fast, stays strong through the pack phase, then
-    // fades across the breakaway so the finish resolves cleanly.
+    // Jostle: strong while bunched (f<0.5), fading out through the staged finish
+    // so the scripted groups stay distinct.
     const up = Math.min(1, f / 0.1);
-    const down = Math.min(1, (1 - f) / Math.max(1e-3, 1 - fb));
+    const down = Math.min(1, (1 - f) / 0.5);
     const env = up * down;
     const t = this.elapsed;
     for (const r of this.racers) {
-      const base = pe * f;                         // shared bunched advance
+      const base = interpKF(r.kf, f);              // scripted stage position
       const surge = r.amp * (Math.sin(r.w * t + r.phase2) + 0.6 * Math.sin(r.w2 * t + r.phase3));
-      let p = base + (r.finalDist - pe) * sprint + surge * env;
+      let p = base + surge * env;
       p = p < 0 ? 0 : p > 1 ? 1 : p;
       r.prog = p;
     }
     this._updateCamera(f);
     if (this.elapsed >= D && !this.winner && this.winnerRacer) {
       this.elapsed = D;
-      for (const r of this.racers) r.prog = r.finalDist;
+      for (const r of this.racers) r.prog = interpKF(r.kf, 1);
       this.winnerRacer.prog = 1;
       this._updateCamera(1, true);
       this.winner = this.winnerRacer.number;
@@ -183,17 +208,23 @@ class KaijuRace {
     }
   }
 
-  // Finish camera: during the breakaway, zoom the view so the lead pack fills
-  // the track toward the finish — trailing racers slide off the left edge.
+  // Staged camera: keeps the top-K racers framed, where K shrinks over the race
+  // (whole field → front half at the midpoint → the final group at the line), so
+  // each fallen-off group slides off the left edge on cue.
   _updateCamera(f, snap) {
-    const fb = this.camF != null ? this.camF : this.breakF;
-    let ramp = f <= fb ? 0 : (f - fb) / (1 - fb);
-    ramp = ramp * ramp * (3 - 2 * ramp);
-    if (ramp <= 0 || this.leadCount >= this.racers.length) { this.camLo = 0; return; }
-    const sorted = this.racers.map((r) => r.prog).sort((a, b) => b - a);
-    const kth = sorted[this.leadCount - 1];        // lowest member of the lead pack
-    const target = ramp * Math.max(0, kth - 0.08);
-    // Ease toward the target so the lively jostling doesn't make the view jitter.
+    const N = this.racers.length, front = this.frontCount, finalK = this.finalK;
+    let K;
+    if (f < 0.45) K = N;
+    else if (f < 0.55) K = N + (front - N) * ((f - 0.45) / 0.1);   // half falls off ~midpoint
+    else if (f < 0.85) K = front;                                   // front group jockeys
+    else K = front + (finalK - front) * Math.min(1, (f - 0.85) / 0.15); // final fall-off
+    K = Math.max(finalK, Math.round(K));
+    let target = 0;
+    if (K < N) {
+      const sorted = this.racers.map((r) => r.prog).sort((a, b) => b - a);
+      target = Math.max(0, sorted[Math.min(K, sorted.length) - 1] - 0.06);
+    }
+    // Ease toward target so the motion doesn't make the view jitter.
     this.camLo = snap ? target : this.camLo + (target - this.camLo) * 0.1;
   }
 
