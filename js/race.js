@@ -229,8 +229,14 @@ class KaijuRace {
   }
 
   _layout() {
-    const horizon = Math.min(230, Math.round(this.H * 0.3)), bottom = 18, left = 50;
-    const finishX = this.W - 110;
+    const mobile = this.W < 620;
+    // Smaller city band on phones → more vertical room for (bigger) racers.
+    const horizon = mobile
+      ? Math.min(150, Math.round(this.H * 0.2))
+      : Math.min(230, Math.round(this.H * 0.3));
+    const bottom = 18;
+    const left = mobile ? 30 : 50;
+    const finishX = this.W - (mobile ? 64 : 110);
     return { horizon, bottom, left, finishX, trackW: finishX - left };
   }
 
@@ -397,9 +403,10 @@ class KaijuRace {
     const bandTop = L.horizon + 6, bandH = H - L.horizon - L.bottom - 12;
     // `h` is the on-screen sprite-canvas height; the creature fills ~90% of it.
     let h;
-    const wCap = this.W * 0.42; // keep sprites from dominating narrow (mobile) screens
-    if (this.lane) h = Math.min((bandH / Math.max(n, 1)) * 1.45, 300, wCap);
-    else h = Math.min(Math.max(46, Math.min(230, 1300 / Math.sqrt(n))), wCap);
+    const mobile = this.W < 620;
+    const wCap = this.W * (mobile ? 0.62 : 0.42); // allow bigger sprites on phones
+    if (this.lane) h = Math.min((bandH / Math.max(n, 1)) * (mobile ? 1.9 : 1.45), 300, wCap);
+    else h = Math.min(Math.max(46, Math.min(230, (mobile ? 1150 : 1300) / Math.sqrt(n))), wCap);
 
     const order = this.lane
       ? [...this.racers].sort((a, b) => a.laneIdx - b.laneIdx)
