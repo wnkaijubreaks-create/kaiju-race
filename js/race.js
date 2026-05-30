@@ -397,8 +397,9 @@ class KaijuRace {
     const bandTop = L.horizon + 6, bandH = H - L.horizon - L.bottom - 12;
     // `h` is the on-screen sprite-canvas height; the creature fills ~90% of it.
     let h;
-    if (this.lane) h = Math.min((bandH / Math.max(n, 1)) * 1.45, 300);
-    else h = Math.max(46, Math.min(230, 1300 / Math.sqrt(n)));
+    const wCap = this.W * 0.42; // keep sprites from dominating narrow (mobile) screens
+    if (this.lane) h = Math.min((bandH / Math.max(n, 1)) * 1.45, 300, wCap);
+    else h = Math.min(Math.max(46, Math.min(230, 1300 / Math.sqrt(n))), wCap);
 
     const order = this.lane
       ? [...this.racers].sort((a, b) => a.laneIdx - b.laneIdx)

@@ -43,7 +43,7 @@
     const m = Math.floor(sec / 60) % 60;
     const h = Math.floor(sec / 3600);
     const p = (x) => String(x).padStart(2, "0");
-    return `${p(h)}:${p(m)}:${p(s)}`;
+    return h > 0 ? `${h}:${p(m)}:${p(s)}` : `${p(m)}:${p(s)}`; // MM:SS under an hour
   }
 
   function tickTimer() {

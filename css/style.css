@@ -16,15 +16,19 @@
 html, body {
   margin: 0;
   height: 100%;
+  width: 100%;
   background: #11131c;
   color: var(--text);
   overflow: hidden;
+  overscroll-behavior: none;
 }
 
 #app {
   position: relative;
   width: 100vw;
-  height: 100vh;
+  height: 100vh;   /* fallback */
+  height: 100dvh;  /* fit the visible area on mobile (excludes browser chrome) */
+  overflow: hidden;
 }
 
 /* ---------- HUD ---------- */
@@ -70,9 +74,6 @@ html, body {
 .hud-title .t-kaiju { color: #7ed957; }                 /* kaiju green */
 .hud-title .t-race  { color: #ffb347; margin-top: 4px; } /* ember orange */
 
-@media (max-width: 680px) {
-  .hud-title span { font-size: 13px; }
-}
 
 .icon-btn {
   background: #11131c;
@@ -212,3 +213,20 @@ html, body {
 .big-btn:hover { filter: brightness(1.08); }
 
 [hidden] { display: none !important; }
+
+/* ---------- Responsive: phones ---------- */
+/* (kept at the end so these override the base sizes at equal specificity) */
+@media (max-width: 620px) {
+  #hud { gap: 7px; padding: 8px 10px; }
+  .icon-btn { width: 34px; height: 34px; font-size: 18px; border-radius: 8px; }
+  .text-btn { font-size: 15px; }
+  .timer { font-size: 22px; padding: 3px 10px; border-width: 3px; letter-spacing: 1px; }
+  .hud-title span { font-size: 12px; }
+  .hud-title .t-race { margin-top: 2px; }
+}
+@media (max-width: 430px) {
+  #hud { gap: 5px; padding: 7px 8px; }
+  .text-btn { font-size: 14px; }
+  .timer { font-size: 20px; padding: 3px 8px; }
+  .hud-title { display: none; } /* no room alongside the controls + timer on a phone */
+}
