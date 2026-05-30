@@ -97,9 +97,12 @@ class KaijuRace {
     const winnerIdx = idxs[0];
 
     this.racers.forEach((r, i) => {
-      r.amp = 0.05 + chaos * 0.18 * Math.random();
-      r.w = ((2 * Math.PI) / D) * (0.5 + Math.random() * 2);
+      // Two surge frequencies per racer → irregular shoot-forward / fall-back.
+      r.amp = 0.07 + chaos * 0.16 * Math.random();
+      r.w = ((2 * Math.PI) / D) * (3 + Math.random() * 4);    // ~3-7 surges over the race
+      r.w2 = ((2 * Math.PI) / D) * (1.5 + Math.random() * 2.5);
       r.phase2 = Math.random() * Math.PI * 2;
+      r.phase3 = Math.random() * Math.PI * 2;
       r.isLead = lead.has(i);
       // Leaders bunch right at the line; trailers fall well short.
       r.finalDist = r.isLead ? 0.9 + Math.random() * 0.09
@@ -154,10 +157,16 @@ class KaijuRace {
     const fb = this.breakF, pe = this.packEnd;
     const sRaw = f <= fb ? 0 : (f - fb) / (1 - fb);
     const sprint = sRaw * sRaw * (3 - 2 * sRaw); // smoothstep 0..1 over the breakaway
-    const env = Math.sin(Math.PI * f);            // jostle, zero at both ends
+    // Jostle envelope: ramps in fast, stays strong through the pack phase, then
+    // fades across the breakaway so the finish resolves cleanly.
+    const up = Math.min(1, f / 0.1);
+    const down = Math.min(1, (1 - f) / Math.max(1e-3, 1 - fb));
+    const env = up * down;
+    const t = this.elapsed;
     for (const r of this.racers) {
       const base = pe * f;                         // shared bunched advance
-      let p = base + (r.finalDist - pe) * sprint + r.amp * Math.sin(r.w * this.elapsed + r.phase2) * env;
+      const surge = r.amp * (Math.sin(r.w * t + r.phase2) + 0.6 * Math.sin(r.w2 * t + r.phase3));
+      let p = base + (r.finalDist - pe) * sprint + surge * env;
       p = p < 0 ? 0 : p > 1 ? 1 : p;
       r.prog = p;
     }
@@ -166,7 +175,7 @@ class KaijuRace {
       this.elapsed = D;
       for (const r of this.racers) r.prog = r.finalDist;
       this.winnerRacer.prog = 1;
-      this._updateCamera(1);
+      this._updateCamera(1, true);
       this.winner = this.winnerRacer.number;
       this.state = "finished";
       cancelAnimationFrame(this._raf);
@@ -176,15 +185,16 @@ class KaijuRace {
 
   // Finish camera: during the breakaway, zoom the view so the lead pack fills
   // the track toward the finish — trailing racers slide off the left edge.
-  _updateCamera(f) {
+  _updateCamera(f, snap) {
     const fb = this.camF != null ? this.camF : this.breakF;
     let ramp = f <= fb ? 0 : (f - fb) / (1 - fb);
     ramp = ramp * ramp * (3 - 2 * ramp);
     if (ramp <= 0 || this.leadCount >= this.racers.length) { this.camLo = 0; return; }
     const sorted = this.racers.map((r) => r.prog).sort((a, b) => b - a);
     const kth = sorted[this.leadCount - 1];        // lowest member of the lead pack
-    const target = Math.max(0, kth - 0.08);
-    this.camLo = ramp * target;
+    const target = ramp * Math.max(0, kth - 0.08);
+    // Ease toward the target so the lively jostling doesn't make the view jitter.
+    this.camLo = snap ? target : this.camLo + (target - this.camLo) * 0.1;
   }
 
   _layout() {
