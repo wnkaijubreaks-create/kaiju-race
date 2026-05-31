@@ -3,6 +3,30 @@
    Background is a destroyed-city scene baked to an offscreen canvas. */
 const LANE_MAX = 24;
 
+/* ───────────────────────────────────────────────────────────────────────────
+   RACE FEEL — the only dials that shape how a race plays out.
+
+   The race STRUCTURE is FIXED and should not be rewritten:
+     • starts as a full pack
+     • racers gradually drop OFF-SCREEN as the camera zooms in (more intense over
+       time): ~50% of them left on screen at half-time, ~25% at 75% elapsed
+     • it narrows to a "top ~10" group that battles, swapping the lead
+     • the finish line appears in the final segment
+     • the WINNER only pulls clear in the last couple seconds (never wire-to-wire)
+
+   To adjust the feel, change a number HERE — do not restructure the logic below.
+   ─────────────────────────────────────────────────────────────────────────── */
+const RACE = {
+  packUntil: 0.2,          // full field on screen until this fraction of the timer
+  visAtHalf: 0.5,          // fraction of the field on screen at 50% elapsed
+  visAt75: 0.25,           // fraction on screen at 75% elapsed
+  finalGroupFrac: 0.14,    // the late battling group ("top ~10") as a fraction of the field …
+  finalGroupMin: 5,        // … but at least this many …
+  finalGroupMax: 12,       // … and at most this many
+  winnerDecidedSec: 3,     // the winner only surges clear within the last this-many seconds
+  finishLineRevealAt: 0.74,// race fraction (0–1) when the finish line appears (final segment)
+};
+
 function cityRng(seed) {
   let a = (seed * 0x9e3779b9) >>> 0;
   return function () {
@@ -87,17 +111,18 @@ class KaijuRace {
     this.draw();
   }
 
-  // Staged race narrative via per-racer keyframe timelines:
-  //   start→~30%  whole pack bunched & jostling
-  //   ~30-45%     the back ~60% fall off early (camera culls them)
-  //   ~72%        an early lead group looks like the winners
-  //   ~88%        the final group surges up from behind
-  //   final push  a tight group of 3-4 battles to the line, winner just edges it
+  // Builds the LOCKED race structure (see the RACE dials at the top of the file):
+  //   pack start → racers string out & drop off-screen on the timer schedule →
+  //   a "top ~10" final group battles, swapping the lead → the winner only surges
+  //   clear in the last RACE.winnerDecidedSec seconds.
   _assignPaces() {
     const chaos = this.cfg.chaos / 100;
     const D = this.cfg.duration;
     const N = this.racers.length;
-    this.breakF = 0.62; // when the finish line starts to reveal
+    this.breakF = RACE.finishLineRevealAt;
+    this.finalK = Math.min(N, Math.max(RACE.finalGroupMin,
+      Math.min(RACE.finalGroupMax, Math.round(N * RACE.finalGroupFrac))));
+    this.surgeF = Math.max(0.78, 1 - RACE.winnerDecidedSec / D); // when the winner's decisive surge starts
 
     const J = (v, a) => v + (Math.random() * 2 - 1) * a;
     const idx = this.racers.map((_, i) => i);
@@ -105,47 +130,37 @@ class KaijuRace {
       const j = Math.floor(Math.random() * (i + 1));
       [idx[i], idx[j]] = [idx[j], idx[i]];
     }
+    const finalK = this.finalK;
+    const finalSet = new Set(idx.slice(0, finalK));            // the group that battles to the line
+    const winnerIdx = idx[Math.floor(Math.random() * finalK)]; // a (varying) member of that group
 
-    // Keep ~22 (≥20) racers in contention to the finish; the rest FALL OFF —
-    // they drift back and fade away over the race (gentle, not a hard cull).
-    const keep = Math.min(N, 22);
-    const frontIdx = idx.slice(0, keep);
-    const fallIdx = idx.slice(keep);
-    const fallSet = new Set(fallIdx);
-
-    // Spread finishing distances: the kept pack fans across the track (0.5-0.95),
-    // the fall-off group ends well back (and fades out — see draw()).
-    frontIdx.forEach((ri, pos) => {
-      const frac = keep <= 1 ? 0 : pos / (keep - 1);
-      this.racers[ri]._fd = Math.max(0.5, Math.min(0.95, J(0.95 - frac * 0.45, 0.03)));
-    });
-    fallIdx.forEach((ri, pos) => {
-      const frac = fallIdx.length <= 1 ? 0 : pos / (fallIdx.length - 1);
-      this.racers[ri]._fd = Math.max(0.1, Math.min(0.46, J(0.45 - frac * 0.33, 0.04)));
-    });
-
-    // ~25% of races: a dark horse from the back of the visible pack storms up to win.
-    const darkHorse = Math.random() < 0.25 && keep >= 5;
-    const winnerIdx = darkHorse ? frontIdx[keep - 1]                          // back of the pack
-      : frontIdx[Math.floor(Math.random() * Math.min(keep, 7))];               // a front contender (varies)
-
-    this.racers.forEach((r, i) => {
-      r.amp = 0.04 + chaos * 0.12 * Math.random();
-      r.w = ((2 * Math.PI) / D) * (3 + Math.random() * 4);
-      r.w2 = ((2 * Math.PI) / D) * (1.5 + Math.random() * 2.5);
+    idx.forEach((ri, pos) => {
+      const r = this.racers[ri];
       r.phase2 = Math.random() * Math.PI * 2;
       r.phase3 = Math.random() * Math.PI * 2;
-      r._fallOff = fallSet.has(i);
-      if (i === winnerIdx && darkHorse) {
-        // lurks at the back of the pack, then surges up to win
-        r.kf = [[0, 0], [0.5, J(0.42, 0.04)], [0.78, J(0.6, 0.04)], [0.93, J(0.92, 0.03)], [1, 1]];
-      } else if (i === winnerIdx) {
-        // bunched, then pulls to the line
-        r.kf = [[0, 0], [0.4, J(0.42, 0.04)], [0.72, 0.72], [1, 1]];
+      r._final = finalSet.has(ri);
+      if (r._final) {
+        // Finalists ride together up front and JOCKEY — time-based wiggle so the
+        // lead swaps every few seconds no matter how long the race is set.
+        r.amp = 0.04 + chaos * 0.04 * Math.random();
+        r.w = 2 * Math.PI * (0.07 + Math.random() * 0.08);
+        r.w2 = 2 * Math.PI * (0.13 + Math.random() * 0.12);
+        if (ri === winnerIdx) {
+          // sits IN the pack (not leading), then surges clear in the final seconds
+          r.kf = [[0, 0], [0.25, 0.30], [0.7, 0.68], [this.surgeF, J(0.84, 0.02)], [1, 1]];
+        } else {
+          // leads at times, but falls just short
+          r.kf = [[0, 0], [0.25, 0.30], [0.7, 0.68], [this.surgeF, J(0.88, 0.03)], [1, J(0.90, 0.03)]];
+        }
       } else {
-        // bunched early, then strings out to its finishing spot
-        const fd = r._fd;
-        r.kf = [[0, 0], [0.4, J(0.40, 0.05)], [0.72, 0.40 + (fd - 0.40) * 0.55], [1, fd]];
+        // Everyone else strings out by rank so the camera culls them off-screen
+        // on the visibility schedule.
+        r.amp = 0.025 + chaos * 0.03 * Math.random();
+        r.w = ((2 * Math.PI) / D) * (3 + Math.random() * 3);
+        r.w2 = ((2 * Math.PI) / D) * (1.5 + Math.random() * 2);
+        const frac = (pos - finalK) / Math.max(1, N - finalK); // 0 (just outside) … 1 (last)
+        const fd = Math.max(0.06, 0.80 - frac * 0.74);
+        r.kf = [[0, 0], [0.25, J(0.30, 0.03)], [0.7, 0.30 + (fd - 0.30) * 0.7], [1, fd]];
       }
     });
     this.winnerRacer = this.racers[winnerIdx];
@@ -192,10 +207,11 @@ class KaijuRace {
     this.elapsed += dt;
     const D = this.cfg.duration;
     const f = Math.min(this.elapsed / D, 1);
-    // Jostle: strong while bunched early, faded out by ~90% so the staged groups
-    // (and the close photo finish) stay distinct.
-    const up = Math.min(1, f / 0.1);
-    const down = Math.max(0, Math.min(1, (0.9 - f) / 0.45));
+    // Jostle stays active (lead keeps swapping) until the winner's surge window,
+    // then fades so the final couple seconds resolve cleanly.
+    const sf = this.surgeF || 0.85;
+    const up = Math.min(1, f / 0.08);
+    const down = f < sf ? 1 : Math.max(0, 1 - (f - sf) / (1 - sf));
     const env = up * down;
     const t = this.elapsed;
     for (const r of this.racers) {
@@ -218,10 +234,26 @@ class KaijuRace {
     }
   }
 
-  // No camera zoom — the whole field stays on screen the entire race; the pack
-  // strings out along the track and stragglers gently fade (see draw()).
-  _updateCamera() {
-    this.camLo = 0;
+  // Camera frames the top V(f) racers; V shrinks on the timer schedule (full pack
+  // → ~50% at half-time → ~25% at 75% → the final group). The shrinking frame is
+  // the zoom getting more intense; everyone below it slides off the left edge.
+  _updateCamera(f, snap) {
+    const N = this.racers.length;
+    const finalK = Math.min(this.finalK || N, N);
+    const fk = finalK / N;
+    let vf;
+    if (f <= RACE.packUntil) vf = 1;
+    else if (f <= 0.5) vf = 1 + (RACE.visAtHalf - 1) * ((f - RACE.packUntil) / (0.5 - RACE.packUntil));
+    else if (f <= 0.75) vf = RACE.visAtHalf + (RACE.visAt75 - RACE.visAtHalf) * ((f - 0.5) / 0.25);
+    else if (f <= 0.95) vf = RACE.visAt75 + (fk - RACE.visAt75) * ((f - 0.75) / 0.2);
+    else vf = fk;
+    const V = Math.min(N, Math.max(finalK, Math.round(N * vf)));
+    let target = 0;
+    if (V < N) {
+      const sorted = this.racers.map((r) => r.prog).sort((a, b) => b - a);
+      target = Math.max(0, sorted[V - 1] - 0.005);
+    }
+    this.camLo = snap ? target : this.camLo + (target - this.camLo) * 0.12;
   }
 
   _layout() {
@@ -408,9 +440,10 @@ class KaijuRace {
       ? [...this.racers].sort((a, b) => a.laneIdx - b.laneIdx)
       : [...this.racers].sort((a, b) => a.prog - b.prog);
 
+    // prog in [camLo, 1] maps across the track; racers below camLo slide off the
+    // left edge (the drop-off) and fade out smoothly as they exit.
     const camLo = this.camLo || 0;
     const span = Math.max(1e-3, 1 - camLo);
-    const lead = this.racers.reduce((m, r) => Math.max(m, r.prog), 0);
 
     for (const r of order) {
       const cv = r.sprite;
@@ -419,13 +452,7 @@ class KaijuRace {
       let cy;
       if (this.lane) cy = bandTop + (bandH / n) * (r.laneIdx + 0.5) + Math.sin(this.elapsed * 4 + r.phase) * 3;
       else cy = bandTop + bandH * r.packY + Math.sin(this.elapsed * 4 + r.phase) * 2;
-      if (cx < -dw) continue;
-      // The fall-off group fades fully away as it drops back; the kept pack stays
-      // visible (only a gentle dim toward the tail).
-      const gap = lead - r.prog;
-      const a = r._fallOff
-        ? Math.max(0, Math.min(1, 1 - (gap - 0.12) / 0.3))   // fades out → "falls off"
-        : Math.max(0.55, Math.min(1, 1 - (gap - 0.35) / 0.5)); // stays in view
+      const a = Math.max(0, Math.min(1, (cx - (L.left - dw * 0.4)) / dw)); // fade out at the left edge
       if (a <= 0.02) continue;
       ctx.globalAlpha = a;
       ctx.drawImage(cv, cx - dw / 2, cy - dh / 2, dw, dh);
