@@ -99,27 +99,25 @@ class KaijuRace {
     const N = this.racers.length;
     this.breakF = 0.62; // when the finish line starts to reveal
 
-    // ~80% progressively fall off; the remaining ~20% (3-7) battle at the line.
-    const front = Math.max(1, Math.min(7, Math.round(N * 0.2)));
-    const back = N - front;
-    this.frontCount = front;
-    this.finalK = Math.min(front, 7);
     const J = (v, a) => v + (Math.random() * 2 - 1) * a;
-
     const idx = this.racers.map((_, i) => i);
     for (let i = idx.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [idx[i], idx[j]] = [idx[j], idx[i]];
     }
-    const frontIdx = idx.slice(0, front);
-    const backIdx = idx.slice(front);
-    const frontSet = new Set(frontIdx);
 
-    // ~28% of races: a DARK HORSE from the back of the pack storms up to win.
-    const darkHorse = Math.random() < 0.28 && backIdx.length > 0;
-    const winnerIdx = darkHorse
-      ? backIdx[Math.floor(Math.random() * backIdx.length)]
-      : frontIdx[Math.floor(Math.random() * frontIdx.length)]; // any finalist — not always the leader
+    // Whole field stays on screen and gently strings out: each racer ends at a
+    // spread-out finishing distance (front high, back low) so the pack fans
+    // along the track rather than getting culled away.
+    idx.forEach((ri, pos) => {
+      const frac = N <= 1 ? 0 : pos / (N - 1);        // 0 = front of field … 1 = back
+      this.racers[ri]._fd = Math.max(0.16, Math.min(0.95, J(0.95 - frac * 0.78, 0.04)));
+    });
+
+    // ~25% of races: a dark horse from the back storms up to win.
+    const darkHorse = Math.random() < 0.25 && N > 8;
+    // winner: usually one of the front-of-field racers (which one varies), else the dark horse
+    const winnerIdx = darkHorse ? idx[N - 1] : idx[Math.floor(Math.random() * Math.min(N, 7))];
 
     this.racers.forEach((r, i) => {
       r.amp = 0.04 + chaos * 0.12 * Math.random();
@@ -128,17 +126,15 @@ class KaijuRace {
       r.phase2 = Math.random() * Math.PI * 2;
       r.phase3 = Math.random() * Math.PI * 2;
       if (i === winnerIdx && darkHorse) {
-        // lurks at the back (off-screen), then rockets up the outside to steal it
-        r.kf = [[0, 0], [0.5, J(0.28, 0.05)], [0.8, J(0.46, 0.05)], [0.92, J(0.9, 0.03)], [1, 1]];
+        // lurks near the back, then surges up through the field to win
+        r.kf = [[0, 0], [0.5, J(0.34, 0.05)], [0.8, J(0.6, 0.05)], [0.93, J(0.92, 0.03)], [1, 1]];
       } else if (i === winnerIdx) {
-        // a finalist that just edges the photo finish
-        r.kf = [[0, 0], [0.3, J(0.34, 0.04)], [0.72, J(0.66, 0.05)], [0.9, J(0.9, 0.03)], [1, 1]];
-      } else if (frontSet.has(i)) {
-        // finalist: contests the line, finishes close (wide jitter → unpredictable order)
-        r.kf = [[0, 0], [0.3, J(0.35, 0.05)], [0.72, J(0.66, 0.08)], [0.9, J(0.9, 0.05)], [1, J(0.92, 0.05)]];
+        // bunched, then pulls to the line
+        r.kf = [[0, 0], [0.4, J(0.42, 0.04)], [0.72, 0.72], [1, 1]];
       } else {
-        // the ~80%: drop back at varied times so they stream off the pack
-        r.kf = [[0, 0], [0.3, J(0.26, 0.06)], [0.6, J(0.34, 0.08)], [0.8, J(0.42, 0.08)], [1, J(0.48, 0.1)]];
+        // bunched early, then gently strings out to its spread finishing spot
+        const fd = r._fd;
+        r.kf = [[0, 0], [0.4, J(0.40, 0.05)], [0.72, 0.40 + (fd - 0.40) * 0.55], [1, fd]];
       }
     });
     this.winnerRacer = this.racers[winnerIdx];
@@ -211,23 +207,10 @@ class KaijuRace {
     }
   }
 
-  // Staged camera: keeps the top-K racers framed, where K shrinks over the race
-  // (whole field → front half at the midpoint → the final group at the line), so
-  // each fallen-off group slides off the left edge on cue.
-  _updateCamera(f, snap) {
-    const N = this.racers.length, front = this.frontCount, finalK = this.finalK;
-    let K;
-    if (f < 0.25) K = N;
-    else if (f < 0.8) K = N + (front - N) * ((f - 0.25) / 0.55); // progressive: ~80% stream off by 0.8
-    else K = finalK;                                              // the 3-7 finalists at the line
-    K = Math.max(finalK, Math.round(K));
-    let target = 0;
-    if (K < N) {
-      const sorted = this.racers.map((r) => r.prog).sort((a, b) => b - a);
-      target = Math.max(0, sorted[Math.min(K, sorted.length) - 1] - 0.06);
-    }
-    // Ease toward target so the motion doesn't make the view jitter.
-    this.camLo = snap ? target : this.camLo + (target - this.camLo) * 0.1;
+  // No camera zoom — the whole field stays on screen the entire race; the pack
+  // strings out along the track and stragglers gently fade (see draw()).
+  _updateCamera() {
+    this.camLo = 0;
   }
 
   _layout() {
@@ -408,16 +391,18 @@ class KaijuRace {
     const mobile = this.W < 620;
     const wCap = this.W * (mobile ? 0.62 : 0.42); // allow bigger sprites on phones
     if (this.lane) h = Math.min((bandH / Math.max(n, 1)) * (mobile ? 1.9 : 1.45), 300, wCap);
-    else h = Math.min(Math.max(46, Math.min(230, (mobile ? 1150 : 1300) / Math.sqrt(n))), wCap);
+    else h = Math.min(Math.max(38, Math.min(160, (mobile ? 820 : 980) / Math.sqrt(n))), wCap);
 
     const order = this.lane
       ? [...this.racers].sort((a, b) => a.laneIdx - b.laneIdx)
       : [...this.racers].sort((a, b) => a.prog - b.prog);
 
-    // Camera: prog in [camLo, 1] maps across the track; anything below camLo
-    // (the trailing racers during the finish zoom) slides off the left edge.
     const camLo = this.camLo || 0;
     const span = Math.max(1e-3, 1 - camLo);
+    // Stragglers gently FADE (rather than getting culled off-screen): the further
+    // a racer is behind the leader, the more it dims — but never below ~0.4, so
+    // the whole field stays visible right through the finish.
+    const lead = this.racers.reduce((m, r) => Math.max(m, r.prog), 0);
 
     for (const r of order) {
       const cv = r.sprite;
@@ -426,8 +411,11 @@ class KaijuRace {
       let cy;
       if (this.lane) cy = bandTop + (bandH / n) * (r.laneIdx + 0.5) + Math.sin(this.elapsed * 4 + r.phase) * 3;
       else cy = bandTop + bandH * r.packY + Math.sin(this.elapsed * 4 + r.phase) * 2;
-      if (cx < -dw) continue; // fully off the left edge — skip
+      if (cx < -dw) continue;
+      const gap = lead - r.prog;
+      ctx.globalAlpha = gap <= 0.28 ? 1 : Math.max(0.4, 1 - (gap - 0.28) * 1.4);
       ctx.drawImage(cv, cx - dw / 2, cy - dh / 2, dw, dh);
     }
+    ctx.globalAlpha = 1;
   }
 }
