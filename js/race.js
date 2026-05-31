@@ -106,18 +106,28 @@ class KaijuRace {
       [idx[i], idx[j]] = [idx[j], idx[i]];
     }
 
-    // Whole field stays on screen and gently strings out: each racer ends at a
-    // spread-out finishing distance (front high, back low) so the pack fans
-    // along the track rather than getting culled away.
-    idx.forEach((ri, pos) => {
-      const frac = N <= 1 ? 0 : pos / (N - 1);        // 0 = front of field … 1 = back
-      this.racers[ri]._fd = Math.max(0.16, Math.min(0.95, J(0.95 - frac * 0.78, 0.04)));
+    // Keep ~22 (≥20) racers in contention to the finish; the rest FALL OFF —
+    // they drift back and fade away over the race (gentle, not a hard cull).
+    const keep = Math.min(N, 22);
+    const frontIdx = idx.slice(0, keep);
+    const fallIdx = idx.slice(keep);
+    const fallSet = new Set(fallIdx);
+
+    // Spread finishing distances: the kept pack fans across the track (0.5-0.95),
+    // the fall-off group ends well back (and fades out — see draw()).
+    frontIdx.forEach((ri, pos) => {
+      const frac = keep <= 1 ? 0 : pos / (keep - 1);
+      this.racers[ri]._fd = Math.max(0.5, Math.min(0.95, J(0.95 - frac * 0.45, 0.03)));
+    });
+    fallIdx.forEach((ri, pos) => {
+      const frac = fallIdx.length <= 1 ? 0 : pos / (fallIdx.length - 1);
+      this.racers[ri]._fd = Math.max(0.1, Math.min(0.46, J(0.45 - frac * 0.33, 0.04)));
     });
 
-    // ~25% of races: a dark horse from the back storms up to win.
-    const darkHorse = Math.random() < 0.25 && N > 8;
-    // winner: usually one of the front-of-field racers (which one varies), else the dark horse
-    const winnerIdx = darkHorse ? idx[N - 1] : idx[Math.floor(Math.random() * Math.min(N, 7))];
+    // ~25% of races: a dark horse from the back of the visible pack storms up to win.
+    const darkHorse = Math.random() < 0.25 && keep >= 5;
+    const winnerIdx = darkHorse ? frontIdx[keep - 1]                          // back of the pack
+      : frontIdx[Math.floor(Math.random() * Math.min(keep, 7))];               // a front contender (varies)
 
     this.racers.forEach((r, i) => {
       r.amp = 0.04 + chaos * 0.12 * Math.random();
@@ -125,14 +135,15 @@ class KaijuRace {
       r.w2 = ((2 * Math.PI) / D) * (1.5 + Math.random() * 2.5);
       r.phase2 = Math.random() * Math.PI * 2;
       r.phase3 = Math.random() * Math.PI * 2;
+      r._fallOff = fallSet.has(i);
       if (i === winnerIdx && darkHorse) {
-        // lurks near the back, then surges up through the field to win
-        r.kf = [[0, 0], [0.5, J(0.34, 0.05)], [0.8, J(0.6, 0.05)], [0.93, J(0.92, 0.03)], [1, 1]];
+        // lurks at the back of the pack, then surges up to win
+        r.kf = [[0, 0], [0.5, J(0.42, 0.04)], [0.78, J(0.6, 0.04)], [0.93, J(0.92, 0.03)], [1, 1]];
       } else if (i === winnerIdx) {
         // bunched, then pulls to the line
         r.kf = [[0, 0], [0.4, J(0.42, 0.04)], [0.72, 0.72], [1, 1]];
       } else {
-        // bunched early, then gently strings out to its spread finishing spot
+        // bunched early, then strings out to its finishing spot
         const fd = r._fd;
         r.kf = [[0, 0], [0.4, J(0.40, 0.05)], [0.72, 0.40 + (fd - 0.40) * 0.55], [1, fd]];
       }
@@ -399,9 +410,6 @@ class KaijuRace {
 
     const camLo = this.camLo || 0;
     const span = Math.max(1e-3, 1 - camLo);
-    // Stragglers gently FADE (rather than getting culled off-screen): the further
-    // a racer is behind the leader, the more it dims — but never below ~0.4, so
-    // the whole field stays visible right through the finish.
     const lead = this.racers.reduce((m, r) => Math.max(m, r.prog), 0);
 
     for (const r of order) {
@@ -412,8 +420,14 @@ class KaijuRace {
       if (this.lane) cy = bandTop + (bandH / n) * (r.laneIdx + 0.5) + Math.sin(this.elapsed * 4 + r.phase) * 3;
       else cy = bandTop + bandH * r.packY + Math.sin(this.elapsed * 4 + r.phase) * 2;
       if (cx < -dw) continue;
+      // The fall-off group fades fully away as it drops back; the kept pack stays
+      // visible (only a gentle dim toward the tail).
       const gap = lead - r.prog;
-      ctx.globalAlpha = gap <= 0.28 ? 1 : Math.max(0.4, 1 - (gap - 0.28) * 1.4);
+      const a = r._fallOff
+        ? Math.max(0, Math.min(1, 1 - (gap - 0.12) / 0.3))   // fades out → "falls off"
+        : Math.max(0.55, Math.min(1, 1 - (gap - 0.35) / 0.5)); // stays in view
+      if (a <= 0.02) continue;
+      ctx.globalAlpha = a;
       ctx.drawImage(cv, cx - dw / 2, cy - dh / 2, dw, dh);
     }
     ctx.globalAlpha = 1;
